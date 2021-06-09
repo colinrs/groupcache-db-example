@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -19,12 +20,18 @@ const (
 	DataSource = "http://127.0.0.1:9005/get/"
 )
 
+type CacheGroup struct {
+	group *groupcache.Group
+	peer *groupcache.HTTPPool
+}
 
-var cacheGroup *groupcache.Group
+
+var apiCacheGroup *CacheGroup
 var httpClient httpclient.Client
 
 
 func GetData(c *gin.Context) {
+
 	req := new(Req)
 	err := c.ShouldBind(req)
 	if err!=nil{
@@ -32,7 +39,7 @@ func GetData(c *gin.Context) {
 		return
 	}
 	var b []byte
-	cacheGroup.Get(c.Request.Context(), req.Key, groupcache.AllocatingByteSliceSink(&b))
+	apiCacheGroup.group.Get(c.Request.Context(), req.Key, groupcache.AllocatingByteSliceSink(&b))
 	result := map[string]interface{}{
 		"key": req.Key,
 		"value": string(b),
@@ -45,6 +52,7 @@ func InitHttpClient(){
 }
 
 func main() {
+	apiCacheGroup = new(CacheGroup)
 	var port = flag.String("port", "9001", "api port")
 	flag.Parse()
 	r := gin.Default()
@@ -71,17 +79,18 @@ func InitCache(port string) {
 		// handle error
 		log.Fatal(err.Error())
 	}
-	var cachePort = ":" + strconv.Itoa(i-1000)
-	peers := groupcache.NewHTTPPool("http://127.0.0.1:" + cachePort)
-
-	cacheGroup = groupcache.NewGroup("SlowDBCache", 64<<20, groupcache.GetterFunc(
+	var cachePort = strconv.Itoa(i-1000)
+	peers := groupcache.NewHTTPPoolOpts("http://127.0.0.1:" + cachePort, &groupcache.HTTPPoolOptions{
+		Replicas: 1,
+		BasePath: "/gouache/",
+	})
+	apiCacheGroup.peer = peers
+	cacheGroup := groupcache.NewGroup("SlowDBCache", 64<<20, groupcache.GetterFunc(
 		func(ctx groupcache.Context, key string, dest groupcache.Sink) error {
 			// get data from source
 			param := map[string]string{
 				"key":key,
 			}
-			_, ok := peers.PickPeer(key)
-			log.Printf("PickPeer:%+v\n", ok)
 			var result string
 			log.Printf("get key:%s data from:%s\n",key, DataSource)
 
@@ -93,8 +102,8 @@ func InitCache(port string) {
 			dest.SetBytes([]byte(result))
 			return nil
 		}))
+	apiCacheGroup.group = cacheGroup
 	peers.Set("http://127.0.0.1:8001", "http://127.0.0.1:8002", "http://127.0.0.1:8003")
-
-	log.Printf("cachegroup:%s slave starting on:%s\n",cacheGroup.Name(), cachePort)
-	http.ListenAndServe("127.0.0.1:"+cachePort, http.HandlerFunc(peers.ServeHTTP))
+	log.Printf("cachegroup:%s slave starting on:127.0.0.1:%s\n",cacheGroup.Name(), cachePort)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf("127.0.0.1:%s",cachePort),http.HandlerFunc(peers.ServeHTTP)))
 }

@@ -69,6 +69,7 @@ func LookDataset(c *gin.Context) {
 }
 
 
+
 var dataSource *DataSourceServer
 
 func main() {
@@ -86,6 +87,7 @@ func main() {
 	r.GET("/del", DelData)
 	r.GET("/clean", CleanData)
 	r.GET("/look", LookDataset)
+	r.GET("/where", LookDataset)
 
 	// Listen and serve on defined port
 	InitServer()
