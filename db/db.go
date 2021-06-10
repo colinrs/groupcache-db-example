@@ -1,38 +1,36 @@
 package db
 
 import (
-	"log"
-	"time"
+	"github.com/colinrs/pkgx/logger"
 )
 
-type SlowDB struct {
+type DB struct {
 	data map[string]string
 }
 
-func (db *SlowDB) Get(key string) string {
-	time.Sleep(time.Duration(300) * time.Millisecond)
+func (db *DB) Get(key string) string {
 	value := db.data[key]
-	log.Printf("getting key:%s value:%s\n", key, value)
+	logger.Info("getting key:%s value:%s", key, value)
 	return value
 }
 
-func (db *SlowDB) Set(key string, value string) {
-	log.Printf("setting %s to %s\n", key, value)
+func (db *DB) Set(key string, value string) {
+	logger.Info("setting %s to %s", key, value)
 	db.data[key] = value
 }
 
-func (db *SlowDB) Del(key string) {
-	log.Printf("del %s\n", key)
+func (db *DB) Del(key string) {
+	logger.Info("del %s", key)
 	delete(db.data, key)
 }
 
-func (db *SlowDB) Data() map[string]string{
-	log.Printf("data %+v\n", db.data)
+func (db *DB) Data() map[string]string{
+	logger.Info("data %+v", db.data)
 	return db.data
 }
 
-func NewSlowDB() *SlowDB {
-	ndb := new(SlowDB)
+func NewDB() *DB {
+	ndb := new(DB)
 	ndb.data = make(map[string]string)
 	return ndb
 }

@@ -1,4 +1,4 @@
-module github.com/colinrs/groupcache-db-experiment
+module github.com/colinrs/groupcache-db-example
 
 go 1.15
 

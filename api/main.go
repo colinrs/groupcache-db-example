@@ -8,8 +8,10 @@ import (
 	"strconv"
 
 	"github.com/colinrs/pkgx/httpclient"
+	"github.com/colinrs/pkgx/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/golang/groupcache"
+	"github.com/golang/groupcache/consistenthash"
 )
 
 type Req struct {
@@ -22,7 +24,7 @@ const (
 
 type CacheGroup struct {
 	group *groupcache.Group
-	peer *groupcache.HTTPPool
+	peerMap *consistenthash.Map
 }
 
 
@@ -47,6 +49,21 @@ func GetData(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+func WhereKey(c *gin.Context) {
+
+	req := new(Req)
+	err := c.ShouldBind(req)
+	if err!=nil{
+		c.String(http.StatusOK, err.Error())
+		return
+	}
+	result := map[string]interface{}{
+		"key": req.Key,
+		"where": apiCacheGroup.peerMap.Get(req.Key),
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 func InitHttpClient(){
 	httpClient = httpclient.InitClient()
 }
@@ -63,6 +80,7 @@ func main() {
 		c.String(http.StatusOK, "Hello World!")
 	})
 	r.GET("/get", GetData)
+	r.GET("/where", WhereKey)
 
 	// Listen and serve on defined port
 	log.Printf("Listening on port %s", *port)
@@ -80,11 +98,14 @@ func InitCache(port string) {
 		log.Fatal(err.Error())
 	}
 	var cachePort = strconv.Itoa(i-1000)
-	peers := groupcache.NewHTTPPoolOpts("http://127.0.0.1:" + cachePort, &groupcache.HTTPPoolOptions{
+	opt := &groupcache.HTTPPoolOptions{
 		Replicas: 1,
 		BasePath: "/gouache/",
-	})
-	apiCacheGroup.peer = peers
+	}
+	cacheGroupHosts := []string{"http://127.0.0.1:8001", "http://127.0.0.1:8002", "http://127.0.0.1:8003"}
+	peers := groupcache.NewHTTPPoolOpts("http://127.0.0.1:" + cachePort, opt)
+	apiCacheGroup.peerMap = consistenthash.New(opt.Replicas, opt.HashFn)
+	apiCacheGroup.peerMap.Add(cacheGroupHosts...)
 	cacheGroup := groupcache.NewGroup("SlowDBCache", 64<<20, groupcache.GetterFunc(
 		func(ctx groupcache.Context, key string, dest groupcache.Sink) error {
 			// get data from source
@@ -92,18 +113,18 @@ func InitCache(port string) {
 				"key":key,
 			}
 			var result string
-			log.Printf("get key:%s data from:%s\n",key, DataSource)
+			logger.Info("get key:%s data from:%s",key, DataSource)
 
 			if err := httpClient.Get(ctx, DataSource, param, &result);err!=nil{
-				log.Printf("get key:%s data err:%s", key, err.Error())
+				logger.Info("get key:%s data err:%s", key, err.Error())
 				return err
 			}
-			log.Printf("get key:%s data from result:%s\n",key, result)
+			logger.Info("get key:%s data from result:%s",key, result)
 			dest.SetBytes([]byte(result))
 			return nil
 		}))
 	apiCacheGroup.group = cacheGroup
-	peers.Set("http://127.0.0.1:8001", "http://127.0.0.1:8002", "http://127.0.0.1:8003")
-	log.Printf("cachegroup:%s slave starting on:127.0.0.1:%s\n",cacheGroup.Name(), cachePort)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf("127.0.0.1:%s",cachePort),http.HandlerFunc(peers.ServeHTTP)))
+	peers.Set(cacheGroupHosts...)
+	logger.Info("cachegroup:%s slave starting on:127.0.0.1:%s",cacheGroup.Name(), cachePort)
+	logger.Fatal(http.ListenAndServe(fmt.Sprintf("127.0.0.1:%s",cachePort),http.HandlerFunc(peers.ServeHTTP)))
 }

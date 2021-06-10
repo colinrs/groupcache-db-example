@@ -4,16 +4,16 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 
-	db2 "github.com/colinrs/groupcache-db-experiment/db"
+	"github.com/colinrs/groupcache-db-example/db"
 
+	"github.com/colinrs/pkgx/logger"
 	"github.com/gin-gonic/gin"
 )
 
 type DataSourceServer struct {
-	db *db2.SlowDB
+	db *db.DB
 }
 
 type Req struct {
@@ -59,7 +59,7 @@ func SetData(c *gin.Context) {
 }
 
 func CleanData(c *gin.Context) {
-	dataSource.db = db2.NewSlowDB()
+	dataSource.db = db.NewDB()
 	c.JSON(http.StatusOK, "ok")
 }
 
@@ -87,19 +87,18 @@ func main() {
 	r.GET("/del", DelData)
 	r.GET("/clean", CleanData)
 	r.GET("/look", LookDataset)
-	r.GET("/where", LookDataset)
 
 	// Listen and serve on defined port
 	InitServer()
-	log.Printf("Listening on port %s", *port)
+	logger.Info("Listening on port %s", *port)
 	r.Run(":" + *port)
 }
 
 func InitServer() {
 	dataSource = &DataSourceServer{
-		db: db2.NewSlowDB(),
+		db: db.NewDB(),
 	}
-	for i:=0;i<10;i++{
+	for i:=0;i<100;i++{
 		key := fmt.Sprintf("key_%d", i)
 		value := fmt.Sprintf("value_%d", i)
 		dataSource.db.Set(key, value)
