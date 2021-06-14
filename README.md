@@ -4,8 +4,8 @@
 
 ### 如何让这个例子跑起来
 
-* git clone git@github.com:colinrs/groupcache-db-experiment.git
-* cd groupcache-db-experiment
+* git clone git@github.com:colinrs/groupcache-db-example.git
+* cd groupcache-db-example
 * make run
   * 将API和 DBServer编译
   * 将API服务和DBServer服务在后台启动
